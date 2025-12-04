@@ -31,6 +31,13 @@ from utils.scene_utils import render_training_image
 from time import time
 import copy
 
+# Import optical flow utilities
+try:
+    from utils.flow_loss_utils import compute_flow_loss, compute_rigidity_loss_batch
+    FLOW_UTILS_AVAILABLE = True
+except ImportError:
+    FLOW_UTILS_AVAILABLE = False
+
 to8b = lambda x : (255*np.clip(x.cpu().numpy(),0,1)).astype(np.uint8)
 
 try:
@@ -299,6 +306,12 @@ def training(dataset, hyper, opt, pipe, testing_iterations, saving_iterations, c
     tb_writer = prepare_output_and_logger(expname)
     gaussians = GaussianModel(dataset.sh_degree, hyper)
     dataset.model_path = args.model_path
+    
+    # Set flow_dir on dataset if optical flow supervision is enabled
+    if hasattr(args, 'flow_dir') and args.flow_dir:
+        dataset.flow_dir = args.flow_dir
+        print(f"Optical flow supervision enabled with flow_dir: {args.flow_dir}")
+    
     timer = Timer()
     scene = Scene(dataset, gaussians, load_coarse=None)
     timer.start()
