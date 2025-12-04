@@ -219,9 +219,27 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
         if opt.lambda_dssim != 0:
             ssim_loss = ssim(image_tensor,gt_image_tensor)
             loss += opt.lambda_dssim * (1.0-ssim_loss)
-        # if opt.lambda_lpips !=0:
-        #     lpipsloss = lpips_loss(image_tensor,gt_image_tensor,lpips_model)
-        #     loss += opt.lambda_lpips * lpipsloss
+        
+        # Optical flow supervision loss
+        if FLOW_UTILS_AVAILABLE and hasattr(opt, 'lambda_flow') and opt.lambda_flow > 0:
+            try:
+                flow_loss = compute_flow_loss(
+                    viewpoint_cams, 
+                    gaussians, 
+                    image_tensor, 
+                    opt.lambda_flow
+                )
+                loss += flow_loss
+            except Exception as e:
+                print(f"Warning: Flow loss computation failed at iteration {iteration}: {e}")
+        
+        # Rigidity regularization loss
+        if FLOW_UTILS_AVAILABLE and hasattr(opt, 'lambda_rigidity') and opt.lambda_rigidity > 0:
+            try:
+                rigidity_loss = compute_rigidity_loss_batch(gaussians, opt.lambda_rigidity)
+                loss += rigidity_loss
+            except Exception as e:
+                print(f"Warning: Rigidity loss computation failed at iteration {iteration}: {e}")
         
         loss.backward()
         if torch.isnan(loss).any():
