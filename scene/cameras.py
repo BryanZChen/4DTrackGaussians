@@ -11,6 +11,7 @@
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 import numpy as np
 from utils.graphics_utils import getWorld2View2, getProjectionMatrix
 
@@ -18,7 +19,7 @@ class Camera(nn.Module):
     def __init__(self, colmap_id, R, T, FoVx, FoVy, image, gt_alpha_mask,
                  image_name, uid,
                  trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device = "cuda", time = 0,
-                 mask = None, depth=None
+                 mask = None, depth=None, flow_path=None
                  ):
         super(Camera, self).__init__()
 
@@ -62,6 +63,45 @@ class Camera(nn.Module):
         # .cuda()
         self.full_proj_transform = (self.world_view_transform.unsqueeze(0).bmm(self.projection_matrix.unsqueeze(0))).squeeze(0)
         self.camera_center = self.world_view_transform.inverse()[3, :3]
+        
+        # Load optical flow if provided
+        self.flow_map = self._load_flow(flow_path)
+    
+    def _load_flow(self, flow_path):
+        """
+        Load optical flow from .npy file.
+        
+        Args:
+            flow_path: Path to .npy flow file or None
+        
+        Returns:
+            Flow tensor [2, H, W] on the camera device, or zero tensor if not provided
+        """
+        if flow_path is None:
+            # Return zero flow (edge case for last frame or when flow not available)
+            flow = torch.zeros((2, self.image_height, self.image_width), 
+                             dtype=torch.float32, device=self.data_device)
+        else:
+            try:
+                flow_np = np.load(flow_path)  # Expected shape: [2, H, W]
+                flow = torch.from_numpy(flow_np).float().to(self.data_device)
+                
+                # Validate shape
+                if flow.shape != (2, self.image_height, self.image_width):
+                    print(f"[Warning] Flow shape {flow.shape} doesn't match image size "
+                          f"({self.image_height}, {self.image_width}). Resizing...")
+                    flow = F.interpolate(
+                        flow.unsqueeze(0), 
+                        size=(self.image_height, self.image_width),
+                        mode='bilinear',
+                        align_corners=False
+                    ).squeeze(0)
+            except Exception as e:
+                print(f"[Warning] Failed to load flow from {flow_path}: {e}")
+                flow = torch.zeros((2, self.image_height, self.image_width),
+                                 dtype=torch.float32, device=self.data_device)
+        
+        return flow
 
 class MiniCam:
     def __init__(self, width, height, fovy, fovx, znear, zfar, world_view_transform, full_proj_transform, time):
