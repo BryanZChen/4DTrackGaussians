@@ -411,6 +411,11 @@ if __name__ == "__main__":
     parser.add_argument("--expname", type=str, default = "")
     parser.add_argument("--configs", type=str, default = "")
     
+    # Optical flow supervision arguments
+    parser.add_argument("--flow_dir", type=str, default=None, help="Directory containing optical flow files")
+    parser.add_argument("--lambda_flow", type=float, default=0.0, help="Weight for optical flow loss")
+    parser.add_argument("--lambda_rigidity", type=float, default=0.0, help="Weight for rigidity regularization loss")
+    
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
     if args.configs:
